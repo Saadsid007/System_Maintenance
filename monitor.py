@@ -6,21 +6,18 @@ import sys
 import logging
 import base64
 
-# Configure logging to look like system logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SYSTEM] %(message)s')
 logger = logging.getLogger(__name__)
 
 class SystemHealthMonitor:
     def __init__(self):
-        # Load Obfuscated Secrets
         self.config_str = os.environ.get('APP_CONFIG') 
-        self.log_id = os.environ.get('LOG_ID')        
-        self.api_key = os.environ.get('API_KEY')    
+        self.log_id = os.environ.get('LOG_ID')         
+        self.api_key = os.environ.get('API_KEY')       
         
         self.session = requests.Session()
         self.headers = None
         
-        # Timer setup (5h 50m limit)
         self.start_time = time.time()
         self.MAX_DURATION = 21000 
 
@@ -28,9 +25,7 @@ class SystemHealthMonitor:
             print("Error: System Configuration Missing (ID/KEY).")
             sys.exit(1)
 
-    # --- STEALTH DECODER (Hidden Strings) ---
     def _d(self, s):
-        """Base64 decode helper to hide strings"""
         return base64.b64decode(s).decode('utf-8')
 
     def load_config(self):
@@ -53,31 +48,26 @@ class SystemHealthMonitor:
             "origin": self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbg=="),
             "referer": self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9jYXJ0"),
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "x-tenant-id": self._d("U0hFSU4="),
+            "x-tenant-id": self._d("U0hFSU4="), 
             "cookie": cookie_string
         }
 
-    # --- CLOUD SYNC (Gist) ---
     def fetch_logs(self):
-        """Reads data from secure cloud storage"""
         headers = {"Authorization": f"token {self.api_key}"}
         try:
             r = requests.get(f"https://api.github.com/gists/{self.log_id}", headers=headers)
             r.raise_for_status()
             files = r.json()['files']
-            # Pick the first file found (so filename inside Gist doesn't matter)
             filename = list(files.keys())[0] 
             content = files[filename]['content']
             return [line.strip() for line in content.split('\n') if line.strip()], filename
         except Exception as e:
-            # UPDATED: Print exact error to debug why Gist is not loading
             print(f" [ERR] Cloud Sync Failed: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f" [ERR] Server Response: {e.response.text}")
             return [], ""
 
     def update_logs(self, valid_list, filename):
-        """Updates cloud storage"""
         headers = {"Authorization": f"token {self.api_key}"}
         new_content = "\n".join(valid_list)
         payload = {"files": {filename: {"content": new_content}}}
@@ -87,10 +77,8 @@ class SystemHealthMonitor:
         except:
             pass
 
-    # --- CORE LOGIC (Hidden) ---
     def ping_endpoint(self, code):
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9hcHBseS12b3VjaGVy")
-        # payload keys are standard, likely ignored by casual viewers
         payload = {"voucherId": code, "device": {"client_type": "web"}}
         try:
             response = self.session.post(url, json=payload, headers=self.headers, timeout=10)
@@ -143,7 +131,6 @@ class SystemHealthMonitor:
             corruption_detected = False 
 
             for item in current_data:
-                # Mask item in logs: "ABC*****"
                 masked = item[:3] + "*****" 
                 
                 resp = self.ping_endpoint(item)
@@ -170,10 +157,13 @@ class SystemHealthMonitor:
                 else:
                     keep_data.append(item)
                 
+                time.sleep(1.5)
 
             if corruption_detected:
                 print("\n[CLEANUP] Purging corrupted data...")
                 self.update_logs(keep_data, filename)
+                print("Waiting 6s before maintenance restart...")
+                time.sleep(6)
                 break 
             
             else:
