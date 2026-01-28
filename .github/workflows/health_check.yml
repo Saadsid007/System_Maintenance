@@ -5,7 +5,12 @@ on:
   repository_dispatch:
     types: [maintenance-restart]
   schedule:
-    - cron: '0 */6 * * *' # Routine Check
+    - cron: '0 */6 * * *' # Routine Check (Backup)
+
+# 👇 YE WALA BLOCK MISSING THA (Iske bina restart nahi hoga)
+permissions:
+  actions: write
+  contents: read
 
 jobs:
   uptime-monitor:
@@ -33,9 +38,9 @@ jobs:
         run: python monitor.py
 
       - name: Re-initialize Process
-        if: always()
+        if: always() # Script fail ho ya pass, ye hamesha chalega
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Ab iske paas permission hai
         run: |
           echo "Process finished. Re-queueing..."
           gh workflow run health_check.yml
