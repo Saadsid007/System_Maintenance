@@ -1,0 +1,41 @@
+name: System Health Monitor
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [maintenance-restart]
+  schedule:
+    - cron: '0 */6 * * *' # Routine Check
+
+jobs:
+  uptime-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+      - name: Load System Config
+        uses: actions/checkout@v3
+      
+      - name: Initialize Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Install Network Tools
+        run: pip install requests
+          
+      - name: Run Diagnostics
+        env:
+          APP_CONFIG: ${{ secrets.APP_CONFIG }}
+          API_KEY: ${{ secrets.API_KEY }}
+          LOG_ID: ${{ secrets.LOG_ID }}
+          PYTHONUNBUFFERED: "1"
+        run: python monitor.py
+
+      - name: Re-initialize Process
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Process finished. Re-queueing..."
+          gh workflow run health_check.yml
