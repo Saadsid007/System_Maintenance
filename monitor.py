@@ -5,7 +5,7 @@ import requests
 import sys
 import logging
 import base64
-import random  # ✅ Added for random delay
+import random
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SYSTEM] %(message)s')
 logger = logging.getLogger(__name__)
@@ -82,11 +82,32 @@ class SystemHealthMonitor:
     def ping_endpoint(self, code):
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9hcHBseS12b3VjaGVy")
         payload = {"voucherId": code, "device": {"client_type": "web"}}
-        try:
-            response = self.session.post(url, json=payload, headers=self.headers, timeout=10)
-            return response.json()
-        except:
-            return None
+        
+        # ✅ RETRY LOGIC (Attempts 3 times)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(url, json=payload, headers=self.headers, timeout=10)
+                
+                # Check for blocking status codes (e.g. 502 Bad Gateway, 403 Forbidden)
+                if response.status_code in [403, 429, 502, 503]:
+                    # If blocked, wait and retry
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                        continue
+
+                return response.json()
+            except requests.exceptions.RequestException:
+                # Network error, wait and retry
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                continue
+            except Exception:
+                # Any other error, return None
+                return None
+        
+        # If all retries fail
+        return None
 
     def reset_endpoint(self, code):
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9yZXNldC12b3VjaGVy")
@@ -156,11 +177,12 @@ class SystemHealthMonitor:
                     print("[CRITICAL] Authentication expired.")
                     sys.exit(1)
                 
-                else:
+                else: # NET_ERR
+                    # If network error persists after retries, keep data safe
                     keep_data.append(item)
                 
-                # ✅ CHANGED: Random delay between 1 and 2 seconds
-                delay = random.uniform(1.7, 2.7)
+                # ✅ Random delay between 1 and 2 seconds
+                delay = random.uniform(1.5, 2.5)
                 time.sleep(delay)
 
             if corruption_detected:
