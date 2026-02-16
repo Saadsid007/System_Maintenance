@@ -5,6 +5,7 @@ import requests
 import sys
 import logging
 import base64
+import random  # ✅ Added for random delay
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SYSTEM] %(message)s')
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class SystemHealthMonitor:
 
         if not self.log_id or not self.api_key:
             print("Error: System Configuration Missing (ID/KEY).")
+            # Ensure these environment variables are set before running
             sys.exit(1)
 
     def _d(self, s):
@@ -157,7 +159,9 @@ class SystemHealthMonitor:
                 else:
                     keep_data.append(item)
                 
-                time.sleep(1.5)
+                # ✅ CHANGED: Random delay between 1 and 2 seconds
+                delay = random.uniform(1.7, 2.7)
+                time.sleep(delay)
 
             if corruption_detected:
                 print("\n[CLEANUP] Purging corrupted data...")
