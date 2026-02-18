@@ -30,7 +30,8 @@ jobs:
           python-version: '3.9'
           
       - name: Install Network Tools
-        run: pip install requests
+        # 🔥 FIX: Added curl_cffi here to support Turbo Mode
+        run: pip install requests curl_cffi
           
       - name: Run Diagnostics
         env:
@@ -46,4 +47,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Process finished. Re-queueing..."
-          gh workflow run health_check.yml
+          # Fix: Added fallback echo if restart fails
+          gh workflow run health_check.yml || echo "⚠️ Auto-restart failed. Check permissions."
