@@ -196,7 +196,7 @@ class SystemHealthMonitor:
                 
                 elif status == "CORRUPT":
                     print(f"   [ERR] Corrupt Data: {masked} -> Purging")
-                    corruption_detected = True
+                    # corruption_detected = True
                     consecutive_errors = 0
                 
                 elif status == "AUTH_FAIL":
