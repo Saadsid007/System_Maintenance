@@ -1,7 +1,7 @@
 import json
 import time
 import os
-import requests # Used only for GitHub API (Gist Sync)
+import requests # Fakta GitHub API (Gist Sync) mate
 import sys
 import logging
 import base64
@@ -14,24 +14,25 @@ from datetime import datetime, timezone, timedelta
 try:
     from curl_cffi import requests as crequests
 except ImportError:
-    print(" [SYS_ERR] Critical Module 'curl_cffi' missing.")
+    print(" [SYS_ERR] Jaruri module 'curl_cffi' nathi malyo.")
     sys.exit(1)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SYSTEM] %(message)s')
 logger = logging.getLogger(__name__)
 
-# Indian Standard Time (IST) setup
+# Indian Standard Time (IST) nu setting
 IST = timezone(timedelta(hours=5, minutes=30))
 
 def get_ist():
-    """Returns current time in IST formatted string"""
+    """IST na hisab thi current time aap she"""
     return datetime.now(IST).strftime('%H:%M:%S.%f')[:-3]
 
-# Polymorphic Fingerprints (Rotating Identities)
+# Alag alag browser na fingerprints (Nava ane vadhu add karya chhe)
 FINGERPRINTS = [
-    "chrome110", "chrome119", "chrome120", "chrome124",
-    "edge99", "edge101", 
-    "safari15_3", "safari17_0"
+    "chrome99", "chrome104", "chrome110", "chrome114", "chrome116", 
+    "chrome119", "chrome120", "chrome124",
+    "edge99", "edge101", "edge114",
+    "safari15_3", "safari15_5", "safari16_0", "safari17_0"
 ]
 
 class SystemHealthMonitor:
@@ -42,21 +43,22 @@ class SystemHealthMonitor:
         
         self.cookie_string = ""
         self.start_time = time.time()
-        self.MAX_DURATION = 21000 # ~6 hours safe limit
+        self.MAX_DURATION = 21000 # ~6 kalak ni limit
         
-        # --- Multi-Threading Safety ---
+        # --- Multi-Threading Mate Safety ---
         self.sessions = []
         self.lock = threading.Lock()
         self.keep_data = []
         self.consecutive_errors = 0
         self.corruption_detected = False
+        self.global_pause = False # Akamai block kare to badha ne roki devanu
 
         if not self.log_id or not self.api_key:
-            print(f"[{get_ist()}]  [SYS_ERR] Config Missing (ID/KEY). Aborting.")
+            print(f"[{get_ist()}]  [SYS_ERR] Config (ID/KEY) khute chhe. Bandh thai rahyu chhe.")
             sys.exit(1)
 
     def _d(self, s):
-        """Decrypts Base64 Strings"""
+        """Base64 string ne decrypt karva mate"""
         return base64.b64decode(s).decode('utf-8')
 
     def load_config(self):
@@ -71,8 +73,8 @@ class SystemHealthMonitor:
         if not self.cookie_string:
             return False
             
-        # --- Create High-Speed Pre-warmed Session Pool (Massive 100 Limit) ---
-        for _ in range(100):
+        # --- Speed mate pehle thi j 50 session tayar rakhsho ---
+        for _ in range(50): 
             fp = random.choice(FINGERPRINTS)
             session = crequests.Session(impersonate=fp)
             session.headers.update({
@@ -87,7 +89,7 @@ class SystemHealthMonitor:
             
         return True
 
-    # --- GITHUB GIST SYNC (Standard Requests) ---
+    # --- GITHUB GIST SYNC ---
     def fetch_logs(self):
         headers = {"Authorization": f"token {self.api_key}"}
         try:
@@ -98,7 +100,7 @@ class SystemHealthMonitor:
             content = files[filename]['content']
             return [line.strip() for line in content.split('\n') if line.strip()], filename
         except Exception as e:
-            print(f"[{get_ist()}]  [CLOUD_ERR] Sync Failed: {e}")
+            print(f"[{get_ist()}]  [CLOUD_ERR] Data lav va ma bhul: {e}")
             return [], ""
 
     def update_logs(self, valid_list, filename):
@@ -107,7 +109,7 @@ class SystemHealthMonitor:
         payload = {"files": {filename: {"content": new_content}}}
         try:
             requests.patch(f"https://api.github.com/gists/{self.log_id}", json=payload, headers=headers)
-            print(f"[{get_ist()}]  [CLOUD_SYNC] Database optimized & cleaned.")
+            print(f"[{get_ist()}]  [CLOUD_SYNC] Data saaf kari ne upload thai gayo chhe.")
         except: pass
 
     # --- TURBO CHECK ENGINE (curl_cffi) ---
@@ -115,13 +117,13 @@ class SystemHealthMonitor:
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9hcHBseS12b3VjaGVy")
         payload = {"voucherId": code, "device": {"client_type": "web"}}
         
-        # Pick a random pre-configured session (Extremely Fast)
+        # Ek random session pakdo
         session = random.choice(self.sessions)
         
         try:
             resp = session.post(url, json=payload, timeout=8)
             
-            # 403 Protection
+            # 403 Block nu dhyan rakho
             if resp.status_code in [403, 429]:
                 return {"status_code": resp.status_code}
                 
@@ -130,22 +132,21 @@ class SystemHealthMonitor:
             return None
 
     def reset_endpoint(self, code):
-        """ This is now run in a background thread so it doesn't slow down checking """
+        """ Pachal thi (background ma) reset karse jethi speed na ghate """
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9yZXNldC12b3VjaGVy")
         payload = {"voucherId": code, "device": {"client_type": "web"}}
         session = random.choice(self.sessions)
         try:
-            session.post(url, json=payload, timeout=2) # Lowered timeout to free sockets faster
+            session.post(url, json=payload, timeout=2) 
         except: pass
 
     def trigger_background_reset(self, code):
-        """ Spawns a fire-and-forget thread so main worker continues instantly """
         threading.Thread(target=self.reset_endpoint, args=(code,), daemon=True).start()
 
     def analyze_signal(self, data):
         if not data: return "NET_ERR"
         
-        if "status_code" in data: return "BLOCK" # WAF blocked us
+        if "status_code" in data: return "BLOCK" 
         
         if "errorMessage" in data:
             errors = data.get("errorMessage", {}).get("errors", [])
@@ -158,99 +159,100 @@ class SystemHealthMonitor:
         return "OK"
 
     def _worker(self, item):
-        """ Multi-threaded worker for checking coupons safely """
+        """ Ek sathe coupon check karva mate nu logic """
         masked = item[:3] + "*****" 
         
-        # Network Safety check inside thread (Optimized so it doesn't freeze all threads simultaneously)
-        should_cool_down = False
+        # 1. Jo server gusse ma hoy to thodi vaar uha raho
+        if self.global_pause:
+            time.sleep(10)
+            
         with self.lock:
-            if self.consecutive_errors > 10:
-                should_cool_down = True
+            if self.consecutive_errors >= 5: 
+                self.global_pause = True
+                print(f"[{get_ist()}]  [🛡️ WAF ALERT] Server a rokya chhe. 10 second mate shant raho...")
+                time.sleep(10)
                 self.consecutive_errors = 0
-                
-        if should_cool_down:
-            print(f"[{get_ist()}]  [WARN] Network Congestion. Cooling down 5s...")
-            time.sleep(5)
+                self.global_pause = False
 
-        # Micro-Delay (0.01s - 0.05s) -> Insanely fast but prevents instant WAF ban
-        time.sleep(random.uniform(0.01, 0.05))
+        # 2. Ramdom time wait karo jethi lagatar request na jay (0.2s - 0.5s)
+        time.sleep(random.uniform(0.2, 0.5))
 
         resp = self.ping_endpoint(item)
         status = self.analyze_signal(resp)
         
-        # Thread-Safe append to ensure NO COUPONS ARE LOST
+        # Ek pan coupon miss na thavo joiye
         with self.lock:
             ts_end = get_ist()
             if status == "OK":
-                print(f"[{ts_end}]    [OK] Verified: {masked}")
-                self.trigger_background_reset(item) # Fire & Forget
+                print(f"[{ts_end}]    [OK] Sachi coupon mali: {masked}")
+                self.trigger_background_reset(item) 
                 self.keep_data.append(item)
-                self.consecutive_errors = 0
+                self.consecutive_errors = max(0, self.consecutive_errors - 1) 
             
             elif status == "ARCHIVED":
-                print(f"[{ts_end}]    [WARN] Archived: {masked}")
-                self.trigger_background_reset(item) # Fire & Forget
+                print(f"[{ts_end}]    [WARN] Juni coupon: {masked}")
+                self.trigger_background_reset(item) 
                 self.keep_data.append(item)
-                self.consecutive_errors = 0
+                self.consecutive_errors = max(0, self.consecutive_errors - 1)
             
             elif status == "CORRUPT":
-                print(f"[{ts_end}]    [ERR] Corrupt Data: {masked} -> Purging")
-                # self.corruption_detected = True 
-                self.consecutive_errors = 0
+                print(f"[{ts_end}]    [ERR] Kharap coupon che: {masked} -> Kadhi didhi")
+                self.corruption_detected = True 
             
             elif status == "AUTH_FAIL":
-                print(f"[{ts_end}]  [CRITICAL] Session Token Expired.")
-                os._exit(1) # Faster exit in multithreaded environment
+                print(f"[{ts_end}]  [CRITICAL] Session Token puru thai gayu.")
+                os._exit(1) 
             
             elif status == "BLOCK":
-                print(f"[{ts_end}]    [BLOCKED] Packet Rejected: {masked}")
-                self.keep_data.append(item) # Kept so we don't lose the coupon
+                print(f"[{ts_end}]    [BLOCKED] Server a block karyu: {masked}")
+                self.keep_data.append(item) 
                 self.consecutive_errors += 1
             
             else: # NET_ERR
-                self.keep_data.append(item) # Kept so we don't lose the coupon
+                self.keep_data.append(item) 
                 self.consecutive_errors += 1
 
     def start_monitoring(self):
-        print(f"[{get_ist()}]  [SYS_INIT] Booting System Monitor v6.0 (Zero-Wait Hyper Engine)...")
+        print(f"[{get_ist()}]  [SYS_INIT] System Monitor v8.0 (Vadhu Fingerprints sathe) Chalu thai rahyu chhe...")
         if not self.setup_session(): 
-            print(f"[{get_ist()}]  [SYS_ERR] Connection Handshake Failed.")
+            print(f"[{get_ist()}]  [SYS_ERR] Connection failed.")
             return
 
         while True:
-            # Lifecycle Management
+            # 6 kalak pachi restart
             if time.time() - self.start_time > self.MAX_DURATION:
-                print(f"\n[{get_ist()}]  [SYS_MAINTENANCE] Scheduled Restart.")
+                print(f"\n[{get_ist()}]  [SYS_MAINTENANCE] Restart thavanu samay thai gayo chhe.")
                 break 
 
-            # Fetch Batch
+            # Data lavo
             current_data, filename = self.fetch_logs()
             
             if not current_data:
-                print(f"[{get_ist()}]  [IDLE] No packets found. Standby 60s...")
+                print(f"[{get_ist()}]  [IDLE] Ek pan packet nathi. 60s mate uba raho...")
                 time.sleep(60)
                 continue
 
-            print(f"\n[{get_ist()}]  [SCAN] Analyzing {len(current_data)} data packets (Speed: Extreme Parallel)...")
+            print(f"\n[{get_ist()}]  [SCAN] {len(current_data)} data packets check thai rahya chhe (Extreme Parallel Speed)...")
             
             self.keep_data = [] 
             self.corruption_detected = False 
             self.consecutive_errors = 0
+            self.global_pause = False
 
-            # --- MASSIVE MULTI-THREADING IMPLEMENTATION ---
-            # 100 parallel workers will process all coupons practically instantly!
-            with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+            # --- SMART MULTI-THREADING ---
+            # 30 workers best chhe. Vadhu fingerprint sathe makkhan ni jem chalse.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
                 executor.map(self._worker, current_data)
 
             # Sync Updates
             if self.corruption_detected:
-                print(f"\n[{get_ist()}]  [DB_SYNC] Removing invalid entries...")
+                print(f"\n[{get_ist()}]  [DB_SYNC] Kharap entry kadhi rahya chhe...")
                 self.update_logs(self.keep_data, filename)
-                print(f"[{get_ist()}]  [SYS] Optimization Complete. Restarting Scan...")
+                print(f"[{get_ist()}]  [SYS] Data safai thai gai. Fari thi check sharu karie chhiye...")
                 time.sleep(5) 
             else:
-                print(f"[{get_ist()}]  [SYS] System Stable. Next Cycle...")
-                time.sleep(1)
+                print(f"[{get_ist()}]  [SYS] System shant chhe. Nava round mate 10s thobho...")
+                time.sleep(10)
 
 if __name__ == "__main__":
     monitor = SystemHealthMonitor()
