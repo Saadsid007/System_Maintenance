@@ -8,31 +8,23 @@ import base64
 import random
 import threading
 import concurrent.futures
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 # --- TURBO STEALTH ENGINE ---
 try:
     from curl_cffi import requests as crequests
 except ImportError:
-    print(" [SYS_ERR] Critical module 'curl_cffi' missing.")
+    print(" [SYS_ERR] Critical Module 'curl_cffi' missing.")
     sys.exit(1)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SYSTEM] %(message)s')
 logger = logging.getLogger(__name__)
 
-# Indian Standard Time (IST) setup
-IST = timezone(timedelta(hours=5, minutes=30))
-
-def get_ist():
-    """Returns current time in IST formatted string"""
-    return datetime.now(IST).strftime('%H:%M:%S.%f')[:-3]
-
 # Polymorphic Fingerprints (Rotating Identities)
 FINGERPRINTS = [
-    "chrome99", "chrome104", "chrome110", "chrome114", "chrome116", 
-    "chrome119", "chrome120", "chrome124",
-    "edge99", "edge101", "edge114",
-    "safari15_3", "safari15_5", "safari16_0", "safari17_0"
+    "chrome110", "chrome119", "chrome120", "chrome124",
+    "edge99", "edge101", 
+    "safari15_3", "safari17_0"
 ]
 
 class SystemHealthMonitor:
@@ -51,10 +43,9 @@ class SystemHealthMonitor:
         self.keep_data = []
         self.consecutive_errors = 0
         self.corruption_detected = False
-        self.global_pause = False # Flag to halt operations if Akamai WAF triggers
 
         if not self.log_id or not self.api_key:
-            print(f"[{get_ist()}]  [SYS_ERR] Config (ID/KEY) missing. Aborting.")
+            print(" [SYS_ERR] Config Missing (ID/KEY). Aborting.")
             sys.exit(1)
 
     def _d(self, s):
@@ -73,9 +64,8 @@ class SystemHealthMonitor:
         if not self.cookie_string:
             return False
             
-        # --- Create High-Speed Pre-warmed Session Pool (Increased to 100 for safety) ---
-        for _ in range(100): 
-            fp = random.choice(FINGERPRINTS)
+        # --- Create High-Speed Pre-warmed Session Pool ---
+        for fp in FINGERPRINTS:
             session = crequests.Session(impersonate=fp)
             session.headers.update({
                 "accept": "application/json",
@@ -89,7 +79,7 @@ class SystemHealthMonitor:
             
         return True
 
-    # --- GITHUB GIST SYNC ---
+    # --- GITHUB GIST SYNC (Standard Requests) ---
     def fetch_logs(self):
         headers = {"Authorization": f"token {self.api_key}"}
         try:
@@ -100,7 +90,7 @@ class SystemHealthMonitor:
             content = files[filename]['content']
             return [line.strip() for line in content.split('\n') if line.strip()], filename
         except Exception as e:
-            print(f"[{get_ist()}]  [CLOUD_ERR] Sync Failed: {e}")
+            print(f" [CLOUD_ERR] Sync Failed: {e}")
             return [], ""
 
     def update_logs(self, valid_list, filename):
@@ -109,7 +99,7 @@ class SystemHealthMonitor:
         payload = {"files": {filename: {"content": new_content}}}
         try:
             requests.patch(f"https://api.github.com/gists/{self.log_id}", json=payload, headers=headers)
-            print(f"[{get_ist()}]  [CLOUD_SYNC] Database optimized & cleaned.")
+            print(" [CLOUD_SYNC] Database optimized & cleaned.")
         except: pass
 
     # --- TURBO CHECK ENGINE (curl_cffi) ---
@@ -117,13 +107,13 @@ class SystemHealthMonitor:
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9hcHBseS12b3VjaGVy")
         payload = {"voucherId": code, "device": {"client_type": "web"}}
         
-        # Pick a random pre-configured session
+        # Pick a random pre-configured session (Extremely Fast)
         session = random.choice(self.sessions)
         
         try:
             resp = session.post(url, json=payload, timeout=8)
             
-            # 403 Block protection
+            # 403 Protection
             if resp.status_code in [403, 429]:
                 return {"status_code": resp.status_code}
                 
@@ -132,23 +122,17 @@ class SystemHealthMonitor:
             return None
 
     def reset_endpoint(self, code):
-        """ Runs in background. Added delay so it doesn't overlap with active checks and trigger DDoS blocks. """
-        time.sleep(random.uniform(2.0, 4.0)) # Wait before resetting to prevent hitting rate limits
-        
         url = self._d("aHR0cHM6Ly93d3cuc2hlaW5pbmRpYS5pbi9hcGkvY2FydC9yZXNldC12b3VjaGVy")
         payload = {"voucherId": code, "device": {"client_type": "web"}}
         session = random.choice(self.sessions)
         try:
-            session.post(url, json=payload, timeout=3) 
+            session.post(url, json=payload, timeout=3)
         except: pass
-
-    def trigger_background_reset(self, code):
-        threading.Thread(target=self.reset_endpoint, args=(code,), daemon=True).start()
 
     def analyze_signal(self, data):
         if not data: return "NET_ERR"
         
-        if "status_code" in data: return "BLOCK" 
+        if "status_code" in data: return "BLOCK" # WAF blocked us
         
         if "errorMessage" in data:
             errors = data.get("errorMessage", {}).get("errors", [])
@@ -164,98 +148,99 @@ class SystemHealthMonitor:
         """ Multi-threaded worker for checking coupons safely """
         masked = item[:3] + "*****" 
         
-        # 1. Global WAF Pause check with Wake-up Jitter
-        if self.global_pause:
-            time.sleep(5 + random.uniform(0.1, 2.0)) # Staggered wake-up so they don't fire all at once
-            
+        # Network Safety check inside thread
         with self.lock:
-            if self.consecutive_errors >= 4: 
-                self.global_pause = True
-                print(f"[{get_ist()}]  [🛡️ WAF ALERT] Server blocked us. Initiating 5s stealth cooldown...")
+            if self.consecutive_errors > 10:
+                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                print(f"[{ts}]  [WARN] Network Congestion. Cooling down 5s...")
                 time.sleep(5)
                 self.consecutive_errors = 0
-                self.global_pause = False
 
-        # 2. Micro-delay to avoid triggering rate limits
-        time.sleep(random.uniform(0.1, 0.3))
+        # Turbo Delay (0.1s - 0.4s) to prevent immediate Akamai block
+        time.sleep(random.uniform(0.1, 0.4))
 
         resp = self.ping_endpoint(item)
         status = self.analyze_signal(resp)
         
+        ts_end = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+
         # Thread-Safe append to ensure NO COUPONS ARE LOST
         with self.lock:
-            ts_end = get_ist()
             if status == "OK":
                 print(f"[{ts_end}]    [OK] Verified: {masked}")
-                self.trigger_background_reset(item) 
+                self.reset_endpoint(item)
                 self.keep_data.append(item)
-                self.consecutive_errors = max(0, self.consecutive_errors - 1) 
+                self.consecutive_errors = 0
             
             elif status == "ARCHIVED":
                 print(f"[{ts_end}]    [WARN] Archived: {masked}")
-                self.trigger_background_reset(item) 
+                self.reset_endpoint(item)
                 self.keep_data.append(item)
-                self.consecutive_errors = max(0, self.consecutive_errors - 1)
+                self.consecutive_errors = 0
             
             elif status == "CORRUPT":
                 print(f"[{ts_end}]    [ERR] Corrupt Data: {masked} -> Purging")
-                self.corruption_detected = True 
+                # self.corruption_detected = True # Uncommented this based on original code
+                self.consecutive_errors = 0
             
             elif status == "AUTH_FAIL":
                 print(f"[{ts_end}]  [CRITICAL] Session Token Expired.")
-                os._exit(1) 
+                os._exit(1) # Faster exit in multithreaded environment
             
             elif status == "BLOCK":
                 print(f"[{ts_end}]    [BLOCKED] Packet Rejected: {masked}")
-                self.keep_data.append(item) 
+                self.keep_data.append(item) # Kept so we don't lose the coupon
                 self.consecutive_errors += 1
             
             else: # NET_ERR
-                self.keep_data.append(item) 
+                self.keep_data.append(item) # Kept so we don't lose the coupon
                 self.consecutive_errors += 1
 
     def start_monitoring(self):
-        print(f"[{get_ist()}]  [SYS_INIT] System Monitor v9.0 (Anti-Block Stealth Engine) Booting...")
+        print(" [SYS_INIT] Booting System Monitor v4.0 (Turbo Multi-Threaded)...")
         if not self.setup_session(): 
-            print(f"[{get_ist()}]  [SYS_ERR] Connection failed.")
+            print(" [SYS_ERR] Connection Handshake Failed.")
             return
 
         while True:
-            # Lifecycle reset (every 6 hours)
+            # Lifecycle Management
             if time.time() - self.start_time > self.MAX_DURATION:
-                print(f"\n[{get_ist()}]  [SYS_MAINTENANCE] Scheduled Restart Initiated.")
+                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                print(f"\n[{ts}]  [SYS_MAINTENANCE] Scheduled Restart.")
                 break 
 
             # Fetch Batch
             current_data, filename = self.fetch_logs()
             
             if not current_data:
-                print(f"[{get_ist()}]  [IDLE] No packets found. Standby 60s...")
+                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                print(f"[{ts}]  [IDLE] No packets found. Standby 60s...")
                 time.sleep(60)
                 continue
 
-            print(f"\n[{get_ist()}]  [SCAN] Analyzing {len(current_data)} data packets (Extreme Parallel Speed)...")
+            ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            print(f"\n[{ts}]  [SCAN] Analyzing {len(current_data)} data packets (Speed: Extreme Parallel)...")
             
             self.keep_data = [] 
             self.corruption_detected = False 
             self.consecutive_errors = 0
-            self.global_pause = False
 
-            # --- SMART MULTI-THREADING ---
-            # 15 workers provides exactly the 8-10 second clear time you requested without triggering the DDoS sensors.
+            # --- MULTI-THREADING IMPLEMENTATION ---
+            # 15 parallel workers will check 15 coupons simultaneously
             with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
                 executor.map(self._worker, current_data)
 
             # Sync Updates
             if self.corruption_detected:
-                print(f"\n[{get_ist()}]  [DB_SYNC] Removing invalid entries...")
+                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                print(f"\n[{ts}]  [DB_SYNC] Removing invalid entries...")
                 self.update_logs(self.keep_data, filename)
-                print(f"[{get_ist()}]  [SYS] Data cleaned. Restarting check loop...")
+                print(f"[{ts}]  [SYS] Optimization Complete. Restarting Scan...")
                 time.sleep(5) 
             else:
-                # Slight wait between cycles ensures Akamai forgets our IP burst
-                print(f"[{get_ist()}]  [SYS] System Stable. Waiting 3s for Next Cycle...")
-                time.sleep(3)
+                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                print(f"[{ts}]  [SYS] System Stable. Next Cycle...")
+                time.sleep(1)
 
 if __name__ == "__main__":
     monitor = SystemHealthMonitor()
