@@ -8,7 +8,7 @@ import base64
 import random
 import threading
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # --- TURBO STEALTH ENGINE ---
 try:
@@ -19,6 +19,13 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SYSTEM] %(message)s')
 logger = logging.getLogger(__name__)
+
+# Indian Standard Time (IST) setup
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist():
+    """Returns current time in IST formatted string"""
+    return datetime.now(IST).strftime('%H:%M:%S.%f')[:-3]
 
 # Polymorphic Fingerprints (Rotating Identities)
 FINGERPRINTS = [
@@ -45,7 +52,7 @@ class SystemHealthMonitor:
         self.corruption_detected = False
 
         if not self.log_id or not self.api_key:
-            print(" [SYS_ERR] Config Missing (ID/KEY). Aborting.")
+            print(f"[{get_ist()}]  [SYS_ERR] Config Missing (ID/KEY). Aborting.")
             sys.exit(1)
 
     def _d(self, s):
@@ -64,8 +71,9 @@ class SystemHealthMonitor:
         if not self.cookie_string:
             return False
             
-        # --- Create High-Speed Pre-warmed Session Pool ---
-        for fp in FINGERPRINTS:
+        # --- Create High-Speed Pre-warmed Session Pool (Increased to 40 for speed) ---
+        for _ in range(40):
+            fp = random.choice(FINGERPRINTS)
             session = crequests.Session(impersonate=fp)
             session.headers.update({
                 "accept": "application/json",
@@ -90,7 +98,7 @@ class SystemHealthMonitor:
             content = files[filename]['content']
             return [line.strip() for line in content.split('\n') if line.strip()], filename
         except Exception as e:
-            print(f" [CLOUD_ERR] Sync Failed: {e}")
+            print(f"[{get_ist()}]  [CLOUD_ERR] Sync Failed: {e}")
             return [], ""
 
     def update_logs(self, valid_list, filename):
@@ -99,7 +107,7 @@ class SystemHealthMonitor:
         payload = {"files": {filename: {"content": new_content}}}
         try:
             requests.patch(f"https://api.github.com/gists/{self.log_id}", json=payload, headers=headers)
-            print(" [CLOUD_SYNC] Database optimized & cleaned.")
+            print(f"[{get_ist()}]  [CLOUD_SYNC] Database optimized & cleaned.")
         except: pass
 
     # --- TURBO CHECK ENGINE (curl_cffi) ---
@@ -151,21 +159,19 @@ class SystemHealthMonitor:
         # Network Safety check inside thread
         with self.lock:
             if self.consecutive_errors > 10:
-                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                print(f"[{ts}]  [WARN] Network Congestion. Cooling down 5s...")
+                print(f"[{get_ist()}]  [WARN] Network Congestion. Cooling down 5s...")
                 time.sleep(5)
                 self.consecutive_errors = 0
 
-        # Turbo Delay (0.1s - 0.4s) to prevent immediate Akamai block
-        time.sleep(random.uniform(0.1, 0.4))
+        # Faster Turbo Delay (0.05s - 0.2s) to prevent immediate Akamai block
+        time.sleep(random.uniform(0.05, 0.2))
 
         resp = self.ping_endpoint(item)
         status = self.analyze_signal(resp)
         
-        ts_end = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-
         # Thread-Safe append to ensure NO COUPONS ARE LOST
         with self.lock:
+            ts_end = get_ist()
             if status == "OK":
                 print(f"[{ts_end}]    [OK] Verified: {masked}")
                 self.reset_endpoint(item)
@@ -197,49 +203,44 @@ class SystemHealthMonitor:
                 self.consecutive_errors += 1
 
     def start_monitoring(self):
-        print(" [SYS_INIT] Booting System Monitor v4.0 (Turbo Multi-Threaded)...")
+        print(f"[{get_ist()}]  [SYS_INIT] Booting System Monitor v5.0 (Hyper Multi-Threaded - IST)...")
         if not self.setup_session(): 
-            print(" [SYS_ERR] Connection Handshake Failed.")
+            print(f"[{get_ist()}]  [SYS_ERR] Connection Handshake Failed.")
             return
 
         while True:
             # Lifecycle Management
             if time.time() - self.start_time > self.MAX_DURATION:
-                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                print(f"\n[{ts}]  [SYS_MAINTENANCE] Scheduled Restart.")
+                print(f"\n[{get_ist()}]  [SYS_MAINTENANCE] Scheduled Restart.")
                 break 
 
             # Fetch Batch
             current_data, filename = self.fetch_logs()
             
             if not current_data:
-                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                print(f"[{ts}]  [IDLE] No packets found. Standby 60s...")
+                print(f"[{get_ist()}]  [IDLE] No packets found. Standby 60s...")
                 time.sleep(60)
                 continue
 
-            ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-            print(f"\n[{ts}]  [SCAN] Analyzing {len(current_data)} data packets (Speed: Extreme Parallel)...")
+            print(f"\n[{get_ist()}]  [SCAN] Analyzing {len(current_data)} data packets (Speed: Extreme Parallel)...")
             
             self.keep_data = [] 
             self.corruption_detected = False 
             self.consecutive_errors = 0
 
             # --- MULTI-THREADING IMPLEMENTATION ---
-            # 15 parallel workers will check 15 coupons simultaneously
-            with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+            # 30 parallel workers will check 30 coupons simultaneously for massive speedup
+            with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
                 executor.map(self._worker, current_data)
 
             # Sync Updates
             if self.corruption_detected:
-                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                print(f"\n[{ts}]  [DB_SYNC] Removing invalid entries...")
+                print(f"\n[{get_ist()}]  [DB_SYNC] Removing invalid entries...")
                 self.update_logs(self.keep_data, filename)
-                print(f"[{ts}]  [SYS] Optimization Complete. Restarting Scan...")
+                print(f"[{get_ist()}]  [SYS] Optimization Complete. Restarting Scan...")
                 time.sleep(5) 
             else:
-                ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                print(f"[{ts}]  [SYS] System Stable. Next Cycle...")
+                print(f"[{get_ist()}]  [SYS] System Stable. Next Cycle...")
                 time.sleep(1)
 
 if __name__ == "__main__":
