@@ -251,8 +251,8 @@ class SystemHealthMonitor:
                 print(f"[{get_ist()}]  [SYS] Data safai thai gai. Fari thi check sharu karie chhiye...")
                 time.sleep(5) 
             else:
-                print(f"[{get_ist()}]  [SYS] System shant chhe. Nava round mate 10s thobho...")
-                time.sleep(10)
+                print(f"[{get_ist()}]  [SYS] System shant chhe. Nava round mate 1s thobho...")
+                time.sleep(1)
 
 if __name__ == "__main__":
     monitor = SystemHealthMonitor()
